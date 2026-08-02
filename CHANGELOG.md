@@ -76,3 +76,45 @@ unavoidably a manual first step either way. README now documents the
 exact clone command (`git clone https://github.com/nv-tlabs/vipe
 vipe-main`) and dataset placement steps; the script's error message also
 now suggests the clone command if `vipe-main/` is missing.
+
+## MAGMA linalg backend patch
+VIPE's depth alignment step (`vipe/priors/depth/alignment.py`) calls
+`torch.linalg.lstsq`, which by default routes through PyTorch's cuSOLVER
+backend on GPU. On some CUDA/driver combinations, this throws:
+```
+torch._C._LinAlgError: cusolver error: CUSOLVER_STATUS_INVALID_VALUE,
+when calling `cusolverDnSormqr_bufferSize(...)`
+```
+This happened consistently on a valid, non-corrupted 126-image dataset
+that had previously worked, and reproduced identically on a completely
+fresh clone/environment — ruling out bad input data or a one-off
+environment issue. It's a cuSOLVER-specific edge case, not a NaN-in-data
+problem despite what the error message suggests.
+
+**Fix:** force PyTorch to use its MAGMA backend for linear algebra instead
+of cuSOLVER:
+```python
+import torch
+torch.backends.cuda.preferred_linalg_library("magma")
+```
+This routes the same computation through different underlying code and
+avoids the buggy cuSOLVER path entirely.
+
+Since this needs to live inside VIPE's own source file (a third-party
+dependency not tracked in this repo), `run_pipeline.sh` applies it
+automatically and idempotently at the start of Stage 2, right before
+`vipe infer` runs — so it works for anyone running the pipeline fresh,
+not just as a manual local edit.
+
+## COLMAP output layout normalization
+`scripts/vipe_to_colmap.py` (part of the VIPE repo) was observed writing
+`cameras.txt` / `images.txt` / `points3D.txt` directly into
+`colmap_out/<scene>/`, rather than nesting them under
+`colmap_out/<scene>/sparse/0/` — the standard COLMAP layout that Gaussian
+Splatting's `train.py` requires. This appears to be another effect of
+VIPE's ongoing updates (same category as the MAGMA patch above): a fresh
+clone can behave differently than an older commit that previously worked,
+even though the conversion itself completes successfully and logs no
+error. The script now detects this case and moves the three files into
+`sparse/0/` automatically before checking for/handing off to Gaussian
+Splatting.
