@@ -1,0 +1,36 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# VIPE outputs (large: depth zips, rgb/vis videos)
+vipe-main/vipe_test_out/
+vipe-main/colmap_out/
+
+# Gaussian Splatting checkpoints/renders
+gaussian-splatting/output/
+
+# Pipeline outputs
+pipeline_out/
+
+# Large media
+*.mp4
+*.zip
+*.ply
+*.pth
+*.ckpt
+*.bin
+
+# Backups / temp
+*.bak
+
+# Personal tooling — not part of the deliverable
+make_demo_video.sh
+
+# Raw datasets — provide separately, don't commit to git
+vipe-main/images/
+datasets/
