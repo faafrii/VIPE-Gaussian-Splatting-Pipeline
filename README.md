@@ -9,6 +9,13 @@ estimation) → **COLMAP-format conversion** → **Gaussian Splatting**
 ## Quickstart
 
 ```bash
+git clone https://github.com/faafrii/VIPE-Gaussian-Splatting-Pipeline.git
+cd VIPE-Gaussian-Splatting-Pipeline
+git clone https://github.com/nv-tlabs/vipe vipe-main
+
+mkdir -p vipe-main/images/your_scene
+cp /path/to/your/photos/*.jpg vipe-main/images/your_scene/
+
 chmod +x run_pipeline.sh
 ./run_pipeline.sh -I ./vipe-main/images/your_scene -n your_scene
 ```
@@ -29,19 +36,44 @@ options.
 - Linux with an NVIDIA GPU + drivers installed
 - [conda](https://docs.conda.io/projects/conda/en/latest/user-guide/getting-started.html) (Anaconda or Miniconda)
 - `git`, `ffmpeg`, `curl`
+- [VIPE](https://github.com/nv-tlabs/vipe) — clone separately into `vipe-main/` (see Setup below). Not bundled in this repo.
 
 `uv` is installed automatically by the script if it's missing — no manual step needed.
+Gaussian Splatting is cloned automatically by the script if missing.
 
 ## Setup
 
-Place the scripts alongside your project folders:
+**1. Clone this repo and VIPE into the same folder:**
+```bash
+git clone https://github.com/faafrii/VIPE-Gaussian-Splatting-Pipeline.git
+cd VIPE-Gaussian-Splatting-Pipeline
+git clone https://github.com/nv-tlabs/vipe vipe-main
+```
+(Gaussian Splatting is cloned automatically by the script if missing — no manual step needed for it.)
 
+**2. Add your dataset.** Place your images in a folder named after your scene, inside VIPE's `images/` directory:
+```bash
+mkdir -p vipe-main/images/your_scene
+cp /path/to/your/photos/*.jpg vipe-main/images/your_scene/
 ```
-your_project/
+
+You should end up with:
+```
+VIPE-Gaussian-Splatting-Pipeline/
 ├── run_pipeline.sh
-├── vipe-main/              (VIPE source)
-└── gaussian-splatting/     (auto-cloned if missing)
+├── README.md
+├── CHANGELOG.md
+├── .gitignore
+├── vipe-main/
+│   └── images/
+│       └── your_scene/        ← your dataset goes here
+│           ├── frame_0001.jpg
+│           ├── frame_0002.jpg
+│           └── ...
+└── gaussian-splatting/        ← auto-cloned on first run
 ```
+
+**3. Run it** — see [Usage](#usage) below.
 
 ## Usage
 

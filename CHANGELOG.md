@@ -65,3 +65,14 @@ working directory, so they resolved relative to the wrong location.
 
 Fix: all input/output paths are now resolved to absolute paths once, near
 the top of the script, before any `pushd` occurs anywhere.
+
+## Documented where VIPE comes from
+The script assumed `vipe-main/` already existed locally but never
+documented how to get it — a checker cloning just this repo had no way to
+obtain VIPE. Unlike Gaussian Splatting, VIPE can't be auto-cloned by the
+script because the user's dataset must be manually placed inside it
+(`vipe-main/images/<scene>/`) before running, so cloning it is
+unavoidably a manual first step either way. README now documents the
+exact clone command (`git clone https://github.com/nv-tlabs/vipe
+vipe-main`) and dataset placement steps; the script's error message also
+now suggests the clone command if `vipe-main/` is missing.

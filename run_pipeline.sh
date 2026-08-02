@@ -161,7 +161,9 @@ if [[ "$SKIP_SETUP" == false ]]; then
     log "Stage 1: Setting up VIPE environment (conda: $VIPE_CONDA_ENV, then uv .venv)"
 
     if [[ ! -d "$VIPE_DIR" ]]; then
-        echo "ERROR: VIPE_DIR not found at $VIPE_DIR. Pass -v /path/to/vipe-main"
+        echo "ERROR: VIPE_DIR not found at $VIPE_DIR."
+        echo "Clone it first: git clone https://github.com/nv-tlabs/vipe $VIPE_DIR"
+        echo "Or pass -v /path/to/vipe-main if it's already cloned elsewhere."
         exit 1
     fi
 
