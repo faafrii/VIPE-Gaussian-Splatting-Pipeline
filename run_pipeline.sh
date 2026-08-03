@@ -25,6 +25,7 @@
 #     -t    Training iterations              (default: 30000)
 #     -f    Render video framerate           (default: 30)
 #     -d    VIPE->COLMAP depth_step          (default: 8)
+#     -m    Max points fed to Gaussian Splatting (default: 500000)
 #     --skip-setup     Skip env creation / dependency installation
 #     --skip-vipe      Skip VIPE stage (reuse existing colmap_out data)
 #     --skip-train     Skip training (reuse existing checkpoint)
@@ -63,6 +64,7 @@ VIPE_CONDA_ENV="cu128"   # conda env: CUDA toolchain + native build deps for VIP
 GS_ENV="gaussian_splatting"
 
 DEPTH_STEP=8              # frame stride used by vipe_to_colmap.py
+MAX_POINTS=500000         # hard cap on point cloud size fed to Gaussian Splatting
 
 # ---------------------------------------------------------------------------
 # Argument parsing
@@ -78,6 +80,7 @@ while [[ $# -gt 0 ]]; do
         -t) ITERATIONS="$2"; shift 2 ;;
         -f) FPS="$2"; shift 2 ;;
         -d) DEPTH_STEP="$2"; shift 2 ;;
+        -m) MAX_POINTS="$2"; shift 2 ;;
         --skip-setup) SKIP_SETUP=true; shift ;;
         --skip-vipe) SKIP_VIPE=true; shift ;;
         --skip-train) SKIP_TRAIN=true; shift ;;
@@ -284,6 +287,35 @@ if [[ "$SKIP_VIPE" == false ]]; then
     if [[ -f "$IMAGES_TXT" ]] && grep -q " images/" "$IMAGES_TXT"; then
         log "Stripping redundant 'images/' prefix from filenames in images.txt"
         sed -i 's| images/| |g' "$IMAGES_TXT"
+    fi
+
+    # VIPE's dense per-pixel depth unprojection can produce millions of
+    # points (observed: ~12M at default settings), causing GPU OOM during
+    # Gaussian Splatting training since it initializes one Gaussian per
+    # point. depth_step reduces this somewhat but its effect varies by
+    # VIPE version and doesn't reliably land in a safe range. Cap the
+    # point count deterministically instead, regardless of how many
+    # points vipe_to_colmap.py produced. See CHANGELOG.md
+    # ("Point cloud size cap").
+    POINTS3D_TXT="$COLMAP_OUT/sparse/0/points3D.txt"
+    if [[ -f "$POINTS3D_TXT" ]]; then
+        POINT_COUNT="$(grep -c -E '^[0-9]' "$POINTS3D_TXT" || true)"
+        if [[ "$POINT_COUNT" -gt "$MAX_POINTS" ]]; then
+            log "Capping point cloud from $POINT_COUNT to $MAX_POINTS points (prevents GPU OOM during training)"
+            python3 - "$POINTS3D_TXT" "$MAX_POINTS" << 'PYEOF'
+import sys, random
+path, max_points = sys.argv[1], int(sys.argv[2])
+with open(path) as f:
+    lines = f.readlines()
+header = [l for l in lines if l.startswith('#')]
+data = [l for l in lines if not l.startswith('#')]
+if len(data) > max_points:
+    data = random.sample(data, max_points)
+with open(path, 'w') as f:
+    f.writelines(header)
+    f.writelines(data)
+PYEOF
+        fi
     fi
 
     # Gaussian Splatting's loader caches a converted points3D.ply the

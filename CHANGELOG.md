@@ -174,3 +174,26 @@ COLMAP layout/path fixes, so training always reflects the current
 `points3D.txt`. Note this only runs automatically when Stage 2 executes;
 a `--skip-vipe` re-run that reuses old COLMAP data needs the stale
 `.ply` removed manually if `points3D.txt` was regenerated out-of-band.
+
+## Point cloud size cap
+Training repeatedly hit `CUDA out of memory` with millions of initial
+Gaussians (observed: ~12M points at default `depth_step=8`, ~3M at
+`depth_step=32`), across multiple separate clones/folders. Increasing
+`depth_step` further wasn't a reliable fix: since it behaves as a frame
+stride (dropping whole frames' depth maps rather than sub-sampling pixels
+within a frame), pushing it high enough to meaningfully shrink the point
+count also drops too many frames and starts hurting reconstruction
+coverage. The underlying issue — dense per-pixel depth unprojection
+producing millions of points regardless of exact settings — also isn't
+guaranteed to behave consistently across different VIPE versions/clones.
+
+Instead of continuing to tune `depth_step` per-environment, the script
+now applies a deterministic hard cap (`-m`, default `500000`) directly on
+`points3D.txt` after conversion: if the point count exceeds the cap, a
+uniform random sample of that size is kept. This is safe for Gaussian
+Splatting specifically because its stock `train.py`/`scene` loader only
+uses `points3D.txt` for initial Gaussian positions/colors — the per-image
+2D-to-3D track associations in `images.txt` are read but not validated
+against `points3D.txt`, so removing points doesn't break anything else in
+the pipeline. Applied automatically, right before the stale-`.ply` cache
+cleanup above (so the cache always regenerates from the capped file).

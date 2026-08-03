@@ -125,6 +125,7 @@ in place, rebuild it from scratch:
 | `-t` | Training iterations | `30000` |
 | `-f` | Render video framerate | `30` |
 | `-d` | VIPE→COLMAP `depth_step` | `8` |
+| `-m` | Max points fed to Gaussian Splatting (prevents GPU OOM) | `500000` |
 | `--skip-setup` | Skip env creation / dependency install | off |
 | `--skip-vipe` | Skip VIPE stage, reuse existing COLMAP data | off |
 | `--skip-train` | Skip training, reuse existing checkpoint | off |
