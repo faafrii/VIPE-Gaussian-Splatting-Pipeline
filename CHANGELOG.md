@@ -118,3 +118,59 @@ even though the conversion itself completes successfully and logs no
 error. The script now detects this case and moves the three files into
 `sparse/0/` automatically before checking for/handing off to Gaussian
 Splatting.
+
+## Missing cstdint/cstddef includes in diff-gaussian-rasterization
+Building the `diff-gaussian-rasterization` CUDA submodule failed with:
+```
+cuda_rasterizer/rasterizer_impl.h(24): error: namespace "std" has no
+member "uintptr_t"
+cuda_rasterizer/rasterizer_impl.h(40): error: identifier "uint32_t" is
+undefined
+```
+`rasterizer_impl.h` uses `uint32_t`, `uint64_t`, and `std::uintptr_t`
+without including `<cstdint>` (for the `uint*_t` types) or `<cstddef>`
+(for `std::size_t`). Older/looser GCC versions pulled these in
+transitively through other standard headers; newer GCC does not,
+so the build fails outright with this compiler. This is a known upstream
+issue in the `graphdeco-inria/gaussian-splatting` repo itself, not
+specific to this pipeline. Since it's third-party code not tracked in
+this repo, `run_pipeline.sh` patches the two missing includes in
+automatically and idempotently in Stage 3, right before building the
+submodule.
+
+## Doubled images/ path in images.txt
+Training failed with:
+```
+FileNotFoundError: [Errno 2] No such file or directory:
+'.../colmap_out/zavod70/images/images/frame_000046.jpg'
+```
+`vipe_to_colmap.py` wrote image filenames into `images.txt` with a
+redundant `images/` prefix already included (e.g.
+`images/frame_000046.jpg`), rather than the bare filename that standard
+COLMAP format expects (just `frame_000046.jpg`, relative to the
+`images/` folder). Gaussian Splatting's loader joins the name from
+`images.txt` onto its own `images/` folder path
+(`camera_utils.py::loadCam`), so a name that already includes `images/`
+produces a doubled `images/images/...` path that doesn't exist. Same
+category as the sparse/0 layout issue above — a newer `vipe_to_colmap.py`
+not quite matching the classic COLMAP convention. Fixed by stripping the
+redundant prefix from `images.txt` right after the sparse/0
+normalization step.
+
+## Stale cached points3D.ply
+Training kept hitting the same `CUDA out of memory` error, with the same
+allocation size and even the same loss value, even after regenerating
+`points3D.txt` with a much larger `--depth_step` (fewer points).
+Root cause: Gaussian Splatting's data loader
+(`scene/dataset_readers.py::readColmapSceneInfo`) converts
+`points3D.txt`/`.bin` into a `points3D.ply` file the *first* time it
+reads a given source folder, and caches it there
+(`sparse/0/points3D.ply`). On every later run, if that `.ply` already
+exists, it's loaded directly and `points3D.txt` is never re-read — so a
+regenerated, smaller `points3D.txt` was being silently ignored in favor
+of the original 12-million-point cache from the very first training
+attempt. Fixed by deleting any stale `points3D.ply` right after the
+COLMAP layout/path fixes, so training always reflects the current
+`points3D.txt`. Note this only runs automatically when Stage 2 executes;
+a `--skip-vipe` re-run that reuses old COLMAP data needs the stale
+`.ply` removed manually if `points3D.txt` was regenerated out-of-band.

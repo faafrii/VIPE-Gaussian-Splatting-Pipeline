@@ -273,6 +273,29 @@ if [[ "$SKIP_VIPE" == false ]]; then
         echo "ERROR: Expected COLMAP output at $COLMAP_OUT/sparse/0 was not produced."
         exit 1
     fi
+
+    # vipe_to_colmap.py was observed writing image filenames in images.txt
+    # with a redundant "images/" prefix (e.g. "images/frame_000046.jpg")
+    # instead of a bare filename. Gaussian Splatting's loader joins this
+    # name onto its own images/ folder path, producing a doubled
+    # images/images/frame_000046.jpg that doesn't exist. Strip the prefix
+    # if present. See CHANGELOG.md ("Doubled images/ path in images.txt").
+    IMAGES_TXT="$COLMAP_OUT/sparse/0/images.txt"
+    if [[ -f "$IMAGES_TXT" ]] && grep -q " images/" "$IMAGES_TXT"; then
+        log "Stripping redundant 'images/' prefix from filenames in images.txt"
+        sed -i 's| images/| |g' "$IMAGES_TXT"
+    fi
+
+    # Gaussian Splatting's loader caches a converted points3D.ply the
+    # first time it reads points3D.txt, and silently reuses that cache on
+    # every later run — even if points3D.txt has since changed (e.g. after
+    # regenerating with a different --depth_step). Delete any stale cache
+    # so training always reflects the current points3D.txt.
+    # See CHANGELOG.md ("Stale cached points3D.ply").
+    if [[ -f "$COLMAP_OUT/sparse/0/points3D.ply" ]]; then
+        log "Removing stale cached points3D.ply so it regenerates from current points3D.txt"
+        rm -f "$COLMAP_OUT/sparse/0/points3D.ply"
+    fi
 else
     log "Stage 2: Skipping VIPE run (--skip-vipe), reusing existing data at $COLMAP_OUT"
     if [[ ! -d "$COLMAP_OUT/sparse/0" ]]; then
@@ -309,6 +332,18 @@ if [[ "$SKIP_SETUP" == false ]]; then
 
     pip install torch==2.1.0 torchvision==0.16.0 --index-url https://download.pytorch.org/whl/cu121
     pip install "numpy<2" plyfile tqdm opencv-python setuptools==69.5.1
+
+    # Known fix: rasterizer_impl.h uses uint32_t/uint64_t/std::uintptr_t
+    # without including <cstdint>/<cstddef>. Older/looser GCC versions
+    # pulled these in transitively; newer GCC does not, causing build
+    # failures like "identifier uint32_t is undefined". Patched
+    # idempotently. See CHANGELOG.md ("Missing cstdint/cstddef includes").
+    RASTER_HEADER="submodules/diff-gaussian-rasterization/cuda_rasterizer/rasterizer_impl.h"
+    if [[ -f "$RASTER_HEADER" ]] && ! grep -q "#include <cstdint>" "$RASTER_HEADER"; then
+        log "Applying known fix: adding missing <cstdint>/<cstddef> includes to $RASTER_HEADER"
+        { echo '#include <cstdint>'; echo '#include <cstddef>'; echo; cat "$RASTER_HEADER"; } > "$RASTER_HEADER.tmp"
+        mv "$RASTER_HEADER.tmp" "$RASTER_HEADER"
+    fi
 
     # Build CUDA submodules from source
     pushd submodules/diff-gaussian-rasterization >/dev/null
